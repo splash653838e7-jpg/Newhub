@@ -521,3 +521,153 @@ function WindUI:destroy()
 end
 
 return WindUI
+-- main.lua — логика MM2 + Wind UI
+local P   = game:GetService("Players")
+local R   = game:GetService("RunService")
+local RS  = game:GetService("ReplicatedStorage")
+local CAM = workspace.CurrentCamera
+local L   = P.LocalPlayer
+
+local BASE = "https://raw.githubusercontent.com/splash653838e7-jpg/Newhub/refs/heads/main/"
+local WindUI = loadstring(game:HttpGet(BASE .. "jsjjjkkk"))()
+
+local COLORS = {
+    Murderer = Color3.fromRGB(255, 60, 60),
+    Sheriff  = Color3.fromRGB(80, 150, 255),
+    Innocent = Color3.fromRGB(80, 255, 120),
+    Gun      = Color3.fromRGB(255, 165, 0),
+}
+
+local CFG = {
+    ESP = true, GunESP = true, Roles = true, Names = true,
+    Distance = true, Tracers = false, Boxes = false,
+    TeamCheck = false, MaxDist = 500, FontSize = 12,
+}
+
+-- ==== роли ====
+local roles = {}
+local function refreshRoles()
+    local f = RS:FindFirstChild("GetPlayerData", true)
+    if not f then return end
+    local ok, d = pcall(function() return f:InvokeServer() end)
+    if ok and type(d) == "table" then roles = d end
+end
+local function getRole(name)
+    local r = roles[name]
+    return (r and r.Role) or "Innocent"
+end
+
+-- ==== ESP ====
+local cache = {}
+local function distTo(p)
+    if not (L.Character and p.Character) then return 0 end
+    local a = L.Character:FindFirstChild("HumanoidRootPart")
+    local b = p.Character:FindFirstChild("HumanoidRootPart")
+    if not a or not b then return 0 end
+    return (a.Position - b.Position).Magnitude
+end
+local function getRoot(p)
+    if not p.Character then return nil end
+    return p.Character:FindFirstChild("HumanoidRootPart")
+end
+local function cleanup(p)
+    local c = cache[p]
+    if not c then return end
+    for _, o in pairs(c) do
+        if o and o.Parent then o:Destroy() end
+    end
+    cache[p] = nil
+end
+
+local function ensure(p)
+    if p == L or not p.Character then return end
+    local c = cache[p]
+    if c then return c end
+    c = {}
+
+    local hl = Instance.new("Highlight")
+    hl.Name = "MM2_HL"
+    hl.Adornee = p.Character
+    hl.Parent = p.Character
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    c.hl = hl
+
+    local root = getRoot(p)
+    if root then
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "MM2_BB"
+        bb.Adornee = root
+        bb.Size = UDim2.new(0, 200, 0, 40)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = 1000
+        bb.Parent = root
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = Color3.new(1, 1, 1)
+        lbl.TextStrokeTransparency = 0
+        lbl.TextStrokeColor3 = Color3.new(0, 0, 0)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = CFG.FontSize
+        lbl.Parent = bb
+        c.bb = bb
+        c.lbl = lbl
+
+        local box = Instance.new("Frame")
+        box.BackgroundTransparency = 1
+        box.BorderSizePixel = 0
+        box.Visible = false
+        box.Parent = bb
+        local stroke = Instance.new("UIStroke", box)
+        stroke.Color = Color3.new(1, 1, 1)
+        stroke.Thickness = 1.5
+        c.box = box
+        c.boxStroke = stroke
+
+        local tr = Instance.new("Frame")
+        tr.BackgroundColor3 = Color3.new(1, 1, 1)
+        tr.BorderSizePixel = 0
+        tr.Visible = false
+        tr.Parent = bb
+        c.tracer = tr
+    end
+    cache[p] = c
+    return c
+end
+
+local function updatePlayer(p)
+    if p == L or not p.Character then cleanup(p) return end
+    if CFG.TeamCheck and p.Team == L.Team then cleanup(p) return end
+    local d = distTo(p)
+    if CFG.MaxDist > 0 and d > CFG.MaxDist then cleanup(p) return end
+
+    local c = ensure(p)
+    if not c then return end
+
+    local role = CFG.Roles and getRole(p.Name) or "Innocent"
+    local color = COLORS[role] or COLORS.Innocent
+
+    if c.hl then
+        c.hl.FillColor = color
+        c.hl.OutlineColor = color
+        c.hl.Enabled = CFG.ESP
+    end
+
+    if c.lbl then
+        local parts = {}
+        if CFG.Names    then parts[#parts+1] = p.DisplayName or p.Name end
+        if CFG.Roles    then parts[#parts+1] = role end
+        if CFG.Distance then parts[#parts+1] = string.format("%dm", math.floor(d)) end
+        c.lbl.Text = table.concat(parts, "  |  ")
+        c.lbl.TextColor3 = color
+        c.lbl.TextSize = CFG.FontSize
+        c.lbl.Visible = CFG.ESP and (#parts > 0)
+    end
+
+    if c.box then
+
+
